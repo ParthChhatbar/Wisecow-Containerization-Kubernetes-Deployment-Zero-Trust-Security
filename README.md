@@ -1,99 +1,171 @@
-1️⃣ Docker Build & Local Test
+# Wisecow – Containerization, Kubernetes Deployment & Zero-Trust Security
 
-Build and run the Wisecow container locally:
+This project demonstrates the **containerization**, **Kubernetes deployment**, **GitHub Actions CI/CD**, and **Zero-Trust security** (via KubeArmor) of the [Wisecow](https://github.com/nyrahul/wisecow) application.  
+The goal is to automate the entire pipeline from code changes to deployment on a Kubernetes cluster, secured with TLS and optional runtime enforcement.
 
-docker build -t wisecow-app .
-docker run -p 4499:4499 wisecow-app
+---
 
+## 📑 Table of Contents
+- [Project Overview](#project-overview)
+- [Architecture](#architecture)
+- [Features](#features)
+- [Repository Structure](#repository-structure)
+- [Setup Instructions](#setup-instructions)
+  - [1. Prerequisites](#1-prerequisites)
+  - [2. Clone the Repository](#2-clone-the-repository)
+  - [3. Build and Run with Docker](#3-build-and-run-with-docker)
+  - [4. Deploy to Kubernetes](#4-deploy-to-kubernetes)
+  - [5. TLS/Ingress Configuration](#5-tlsingress-configuration)
+  - [6. CI/CD Workflow](#6-cicd-workflow)
+  - [7. Optional: KubeArmor Zero-Trust Policy](#7-optional-kubearmor-zero-trust-policy)
+- [Secrets Configuration](#secrets-configuration)
+- [License](#license)
 
-Visit: http://localhost:4499
+---
 
-2️⃣ Kubernetes Deployment
-Apply manifests
+## Project Overview
+The Wisecow app generates random quotes and audio (cowsay + fortune).  
+This project:
+1. **Dockerizes** the app for portability.
+2. Deploys it on a **Kubernetes cluster** (Minikube/Kind or any managed cluster).
+3. Implements **GitHub Actions** to automate:
+   - Docker image build & push to a container registry (GHCR or Docker Hub).
+   - Automatic deployment to Kubernetes after successful image build.
+4. Secures traffic with **TLS** using `cert-manager` and Kubernetes Ingress.
+5. (Optional) Enforces a **Zero-Trust policy** using KubeArmor to prevent unauthorized actions inside the container.
+
+---
+
+## Architecture
+```
+Developer Commit → GitHub → GitHub Actions CI/CD →
+Docker Image Build → Container Registry →
+Kubernetes Deployment → TLS-secured Service
+(Optional) → KubeArmor Runtime Enforcement
+```
+
+---
+
+## Features
+- **Containerization**: Dockerfile builds a lean, production-ready image.
+- **Kubernetes Deployment**: Deployment, Service, and Ingress manifests included.
+- **TLS Security**: Automated certificate management with `cert-manager`.
+- **CI/CD Pipeline**: GitHub Actions builds, pushes, and deploys on each commit.
+- **Zero-Trust Runtime**: Optional KubeArmor policy restricts unauthorized access.
+
+---
+
+## Repository Structure
+```
+.
+├─ .github/
+│  └─ workflows/
+│     └─ ci-cd.yml         # GitHub Actions pipeline
+├─ k8s/
+│  ├─ deployment.yaml      # Wisecow Deployment
+│  ├─ service.yaml         # Wisecow Service
+│  ├─ ingress.yaml         # Ingress + TLS
+│  ├─ issuer.yaml          # ClusterIssuer (Let's Encrypt)
+│  └─ kubearmor-policy.yaml# Optional Zero-Trust policy
+├─ wisecow.sh              # Wisecow application script
+├─ Dockerfile              # Container image definition
+└─ README.md               # Project documentation
+```
+
+---
+
+## Setup Instructions
+
+### 1. Prerequisites
+- **Docker** installed and running
+- **kubectl** configured for your cluster
+- **Minikube / Kind / Managed K8s** cluster
+- **Helm** (for installing cert-manager)
+- **GitHub Account & PAT** (if using Docker Hub or GHCR)
+
+### 2. Clone the Repository
+```bash
+git clone https://github.com/ParthChhatbar/Wisecow-Containerization-Kubernetes-Deployment-Zero-Trust-Security.git
+cd Wisecow-Containerization-Kubernetes-Deployment-Zero-Trust-Security
+```
+
+### 3. Build and Run with Docker
+```bash
+docker build -t wisecow:latest .
+docker run -p 8000:8000 wisecow:latest
+```
+Visit: [http://localhost:8000](http://localhost:8000)
+
+### 4. Deploy to Kubernetes
+Apply manifests in order:
+```bash
 kubectl apply -f k8s/deployment.yaml
 kubectl apply -f k8s/service.yaml
+```
+
+Check resources:
+```bash
+kubectl get pods
+kubectl get svc
+```
+
+### 5. TLS/Ingress Configuration
+Install `cert-manager`:
+```bash
+kubectl apply -f https://github.com/cert-manager/cert-manager/releases/latest/download/cert-manager.yaml
+```
+Create ClusterIssuer & Ingress:
+```bash
+kubectl apply -f k8s/issuer.yaml
 kubectl apply -f k8s/ingress.yaml
+```
 
-3️⃣ TLS Setup
-Local (Self-Signed)
+Ensure your DNS points to the cluster load balancer (or use a Minikube tunnel).
 
-For local clusters (Minikube/Kind), create a self-signed certificate:
+### 6. CI/CD Workflow
+The GitHub Actions pipeline (`.github/workflows/ci-cd.yml`) performs:
+1. **Build & Push**: Builds the Docker image and pushes to GHCR/Docker Hub on every commit to `main`.
+2. **Deploy**: Uses the Kubernetes config stored in GitHub Secrets to apply manifests.
 
-openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-  -subj "/CN=wisecow.local/O=wisecow" \
-  -keyout wisecow.key -out wisecow.crt
+#### Required Secrets
+| Secret Name       | Purpose                                   |
+|-------------------|--------------------------------------------|
+| `KUBECONFIG_DATA` | Base64-encoded kubeconfig for cluster access |
+| `DOCKER_USERNAME` | Docker Hub username (if using Docker Hub)   |
+| `DOCKER_PASSWORD` | Docker Hub token/password                   |
 
-kubectl create secret tls wisecow-tls \
-  --cert=wisecow.crt --key=wisecow.key
+> For GHCR, `GITHUB_TOKEN` is sufficient if using the same repo.
 
+### 7. Optional: KubeArmor Zero-Trust Policy
+1. Install KubeArmor in the cluster:
+   ```bash
+   kubectl apply -f https://raw.githubusercontent.com/kubearmor/KubeArmor/main/install/kubearmor-operator.yaml
+   kubectl apply -f https://raw.githubusercontent.com/kubearmor/KubeArmor/main/install/kubearmor-daemonset.yaml
+   ```
+2. Apply the policy:
+   ```bash
+   kubectl apply -f k8s/kubearmor-policy.yaml
+   ```
+3. Attempt restricted operations inside the pod to generate violations (view via `kubectl logs` or KubeArmor CLI).
 
-Update /etc/hosts to map wisecow.local to your cluster IP.
+---
 
-Access the app at https://wisecow.local
- (accept browser warning).
+## Secrets Configuration
+### Encode Kubeconfig
+Linux/Mac:
+```bash
+cat ~/.kube/config | base64 --wrap=0
+```
+Windows PowerShell:
+```powershell
+[Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes((Get-Content $env:USERPROFILE + "\.kube\config" -Raw)))
+```
+Copy the single line output into the GitHub Secret `KUBECONFIG_DATA`.
 
-Production (Let’s Encrypt)
+---
 
-Install cert-manager:
-
-kubectl apply --validate=false \
-  -f https://github.com/cert-manager/cert-manager/releases/latest/download/cert-manager.yaml
-
-
-Edit k8s/cluster-issuer.yaml with your email and apply:
-
-kubectl apply -f k8s/cluster-issuer.yaml
-
-
-Update k8s/ingress.yaml with your real domain and apply:
-
-kubectl apply -f k8s/ingress.yaml
-
-
-Cert-manager will automatically provision and renew TLS certificates.
-
-4️⃣ CI/CD with GitHub Actions
-
-The workflow .github/workflows/ci-cd.yml automates:
-
-Build & Push – Builds the Docker image and pushes to a container registry (GitHub Container Registry or Docker Hub) on every push to main.
-
-Deploy – Applies Kubernetes manifests to update the cluster automatically.
-5️⃣ Zero-Trust Security with KubeArmor
-Install KubeArmor
-kubectl apply -f https://kubearmor.io/docs/latest/install/kubearmor/kubearmor-operator.yaml
-kubectl apply -f https://kubearmor.io/docs/latest/install/kubearmor/kubearmor-ds.yaml
-kubectl get pods -n kubearmor
-
-Apply Zero-Trust Policy
-kubectl apply -f k8s/kubearmor-policy.yaml
-
-
-This policy:
-
-Blocks all file writes except the Wisecow script
-
-Restricts process execution to only required binaries
-
-Limits network traffic to the Wisecow service port
-
-Testing Policy Violations
-
-Exec into a Wisecow pod:
-
-kubectl exec -it <wisecow-pod> -- /bin/bash
-
-
-Attempt forbidden actions (e.g., creating files, external network calls).
-KubeArmor logs the violations in real time.
-
-✅ End Goal
-
-By following this repository and README:
-
-Wisecow is fully containerized
-
-Deployed on Kubernetes with automated TLS
+## License
+This project is licensed under the [MIT License](LICENSE).
 
 Backed by a GitHub Actions CI/CD pipeline
 
