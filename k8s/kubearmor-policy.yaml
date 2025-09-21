@@ -1,0 +1,37 @@
+apiVersion: security.kubearmor.com/v1
+kind: KubeArmorPolicy
+metadata:
+  name: wisecow-zero-trust
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: wisecow
+  file:
+    matchPaths:
+      # Deny all file writes
+      - path: "/**"
+        action: Block
+        severity: 5
+        matchType: Regex
+    matchPathsExceptions:
+      # Allow execution of wisecow.sh
+      - path: "/app/wisecow.sh"
+        action: Allow
+  process:
+    matchPaths:
+      # Deny all exec by default
+      - path: "/**"
+        action: Block
+        severity: 5
+        matchType: Regex
+    matchPathsExceptions:
+      # Allow bash to run wisecow.sh
+      - path: "/bin/bash"
+        action: Allow
+  network:
+    matchProtocols:
+      - TCP
+    matchPorts:
+      - 4499
+    action: Allow
